@@ -1,13 +1,13 @@
 import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
+import { errors, celebrate, Joi } from 'celebrate';
 import usersRouter from './routes/users';
 import cardsRouter from './routes/cards';
 import { login, createUser } from './controllers/users';
 import authMiddleware from './middlewares/auth';
-import { errors } from 'celebrate';
 import { requestLogger, errorLogger } from './middlewares/logger';
-import { celebrate, Joi } from 'celebrate';
-import { REGULAR_URL } from './constants';
+import { URL_REG_EXP, EMAIL_REG_EXP } from './constants';
+import { SessionError } from './types';
 
 const { PORT = 3000 } = process.env;
 
@@ -22,16 +22,16 @@ app.use(requestLogger);
 app.post('/signin', celebrate({
   body: Joi.object().keys({
     email: Joi.string().required(),
-    password: Joi.string().required()
+    password: Joi.string().required(),
   }),
 }), login);
 app.post('/signup', celebrate({
   body: Joi.object().keys({
-    email: Joi.string().required(),
+    email: Joi.string().required().pattern(new RegExp(EMAIL_REG_EXP)),
     password: Joi.string().required(),
-    name: Joi.string().alphanum().min(2).max(30),
-    about: Joi.string().alphanum().min(2).max(200),
-    avatar: Joi.string().pattern(new RegExp(REGULAR_URL))
+    name: Joi.string().min(2).max(30),
+    about: Joi.string().min(2).max(200),
+    avatar: Joi.string().pattern(new RegExp(URL_REG_EXP)),
   }),
 }), createUser);
 
@@ -43,7 +43,7 @@ app.use('/cards', cardsRouter);
 app.use(errorLogger);
 app.use(errors());
 // eslint-disable-next-line no-unused-vars
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+app.use((err: SessionError, req: Request, res: Response, next: NextFunction) => {
   const { statusCode = 500, message } = err;
 
   res.status(statusCode)

@@ -1,4 +1,5 @@
 import { model, Schema } from 'mongoose';
+import { EMAIL_REG_EXP, URL_REG_EXP } from '../constants';
 
 export interface IUser {
   email: string;
@@ -13,11 +14,15 @@ const userSchema = new Schema<IUser>({
     type: String,
     required: true,
     unique: true,
+    validate: {
+      validator: (v: string) => EMAIL_REG_EXP.test(v),
+      message: 'Почта пользователя не прошла валидацию.',
+    },
   },
   password: {
     type: String,
     required: true,
-    select: false
+    select: false,
   },
   name: {
     type: String,
@@ -34,6 +39,10 @@ const userSchema = new Schema<IUser>({
   avatar: {
     type: String,
     default: 'https://pictures.s3.yandex.net/resources/jacques-cousteau_1604399756.png',
+    validate: {
+      validator: (v: string) => URL_REG_EXP.test(v),
+      message: 'Ссылка на аватар пользователя не прошла валидацию.',
+    },
   },
 });
 

@@ -1,13 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import User from '../models/user';
 import IncorrectDataError from '../errors/incorrect-data-error';
 import NotFoundError from '../errors/not-found-error';
 import UnauthorizedError from '../errors/unauthorized-error';
 import ConflictError from '../errors/conflict-error';
-import jwt from 'jsonwebtoken';
-import validator from 'validator';
 import { SECRET_KEY } from '../constants';
+import { SessionRequest } from '../types';
 
 export const getUsers = (req: Request, res: Response, next: NextFunction) => {
   User.find({})
@@ -24,21 +24,25 @@ export const getUserById = (req: Request, res: Response, next: NextFunction) => 
     })
     .catch((err) => {
       if (err.name === 'CastError') {
-        throw new NotFoundError('Пользователь по указанному _id не найден');
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
       }
-    })
-    .catch(next);
+      next(err);
+    });
 };
 
 export const createUser = (req: Request, res: Response, next: NextFunction) => {
-  const { email, password, name, about, avatar } = req.body;
+  const {
+    email, password, name, about, avatar,
+  } = req.body;
 
-  if (!validator.isEmail(email)) {
-    next(new IncorrectDataError('Передан некорректный email при создании пользователя'));
-    return
-  }
+  User.find({ email })
+    .then((data) => {
+      if (data.length > 0) {
+        next(new ConflictError('Пользователь с таким email уже существует'));
+      }
+    });
 
-  bcrypt.hash(password, 10)
+  return bcrypt.hash(password, 10)
     .then((hash) => {
       User.create({
         email,
@@ -52,18 +56,19 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
         })
         .catch((err) => {
           if (err.name === 'MongoServerError') {
-            throw new ConflictError('Пользователь с таким email уже существует');
+            next(new ConflictError('Пользователь с таким email уже существует'));
+            return;
           }
           if (err.name === 'ValidationError') {
-            throw new IncorrectDataError('Переданы некорректные данные при создании пользователя');
+            next(new IncorrectDataError('Переданы некорректные данные при создании пользователя'));
+            return;
           }
-        })
-        .catch(next);
+          next(err);
+        });
     })
-    .catch((err) => {
-      throw new IncorrectDataError('Переданы некорректные данные при создании пользователя');
-    })
-    .catch(next);
+    .catch(() => {
+      next(new IncorrectDataError('Переданы некорректные данные при создании пользователя'));
+    });
 };
 
 export const login = (req: Request, res: Response, next: NextFunction) => {
@@ -72,10 +77,11 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
   User.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        return
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        return;
       }
 
-      return bcrypt.compare(password, user.password)
+      bcrypt.compare(password, user.password)
         .then((matched) => {
           if (!matched) {
             // хеши не совпали — отклоняем промис
@@ -84,30 +90,33 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
 
           const token = jwt.sign({ _id: user._id }, SECRET_KEY, { expiresIn: '7d' });
           res.send({ user, token });
-        })
+        });
     })
-
     .catch((err) => {
       if (err.name === 'CastError') {
-        throw new NotFoundError('Пользователь по указанному _id не найден');
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        return;
       }
+      next(err);
     });
 };
 
-export const getCurrentUser = (req: any, res: Response, next: NextFunction) => {
-  User.findById(req.user._id)
+export const getCurrentUser = (req: SessionRequest, res: Response, next: NextFunction) => {
+  User.findById(req.user!._id)
     .then((user) => res.send(user))
     .catch((err) => {
       if (err.name === 'CastError') {
-        throw new NotFoundError('Пользователь по указанному _id не найден');
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        return;
       }
+      next(err);
     });
 };
 
-export const updateUser = (req: any, res: Response, next: NextFunction) => {
+export const updateUser = (req: SessionRequest, res: Response, next: NextFunction) => {
   const { name, about } = req.body;
   User.findByIdAndUpdate(
-    req.user._id,
+    req.user!._id,
     {
       name,
       about,
@@ -115,42 +124,44 @@ export const updateUser = (req: any, res: Response, next: NextFunction) => {
     {
       new: true,
       runValidators: true,
-      upsert: true,
     },
   )
     .then((user) => res.send(user))
     .catch((err) => {
       if (err.name === 'CastError') {
-        throw new NotFoundError('Пользователь по указанному _id не найден');
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        return;
       }
       if (err.name === 'ValidationError') {
-        throw new IncorrectDataError('Переданы некорректные данные при обновлении пользователя');
+        next(new IncorrectDataError('Переданы некорректные данные при обновлении пользователя'));
+        return;
       }
-    })
-    .catch(next);
+      next(err);
+    });
 };
 
-export const updateAvatar = (req: any, res: Response, next: NextFunction) => {
+export const updateAvatar = (req: SessionRequest, res: Response, next: NextFunction) => {
   const { avatar } = req.body;
   User.findByIdAndUpdate(
-    req.user._id,
+    req.user!._id,
     {
       avatar,
     },
     {
       new: true,
       runValidators: true,
-      upsert: true,
     },
   )
     .then((user) => res.send(user))
     .catch((err) => {
       if (err.name === 'CastError') {
-        throw new NotFoundError('Пользователь по указанному _id не найден');
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        return;
       }
       if (err.name === 'ValidationError') {
-        throw new IncorrectDataError('Переданы некорректные данные при обновлении аватара');
+        next(new IncorrectDataError('Переданы некорректные данные при обновлении аватара'));
+        return;
       }
-    })
-    .catch(next);
+      next(err);
+    });
 };
