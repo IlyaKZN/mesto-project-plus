@@ -39,7 +39,7 @@
         }
       ],
       "no-underscore-dangle": [
-        "off",
+        "error",
         { "allow": ["_id"] }
       ]
   }

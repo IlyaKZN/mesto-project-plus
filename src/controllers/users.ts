@@ -20,7 +20,11 @@ export const getUsers = (req: Request, res: Response, next: NextFunction) => {
 export const getUserById = (req: Request, res: Response, next: NextFunction) => {
   User.findById(req.params.userId)
     .then((user) => {
-      res.send({ data: user });
+      if (user) {
+        res.send({ data: user });
+      } else {
+        next(new NotFoundError('Пользователь по указанному _id не найден'));
+      }
     })
     .catch((err) => {
       if (err.name === 'CastError') {
@@ -35,13 +39,6 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
     email, password, name, about, avatar,
   } = req.body;
 
-  User.find({ email })
-    .then((data) => {
-      if (data.length > 0) {
-        next(new ConflictError('Пользователь с таким email уже существует'));
-      }
-    });
-
   return bcrypt.hash(password, 10)
     .then((hash) => {
       User.create({
@@ -55,7 +52,7 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
           res.send(user);
         })
         .catch((err) => {
-          if (err.name === 'MongoServerError') {
+          if (err.code === 11000) {
             next(new ConflictError('Пользователь с таким email уже существует'));
             return;
           }
@@ -66,9 +63,7 @@ export const createUser = (req: Request, res: Response, next: NextFunction) => {
           next(err);
         });
     })
-    .catch(() => {
-      next(new IncorrectDataError('Переданы некорректные данные при создании пользователя'));
-    });
+    .catch((err) => next(err));
 };
 
 export const login = (req: Request, res: Response, next: NextFunction) => {
@@ -77,7 +72,7 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
   User.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        next(new NotFoundError('Пользователь по указанному _id не найден'));
+        next(new NotFoundError('Неправильные почта или пароль'));
         return;
       }
 
@@ -92,12 +87,8 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
           res.send({ user, token });
         });
     })
-    .catch((err) => {
-      if (err.name === 'CastError') {
-        next(new NotFoundError('Пользователь по указанному _id не найден'));
-        return;
-      }
-      next(err);
+    .catch(() => {
+      next(new NotFoundError('Неправильные почта или пароль'));
     });
 };
 
