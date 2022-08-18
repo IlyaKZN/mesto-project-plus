@@ -72,7 +72,7 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
   User.findOne({ email }).select('+password')
     .then((user) => {
       if (!user) {
-        next(new NotFoundError('Неправильные почта или пароль'));
+        next(new UnauthorizedError('Неправильные почта или пароль'));
         return;
       }
 
@@ -87,8 +87,8 @@ export const login = (req: Request, res: Response, next: NextFunction) => {
           res.send({ user, token });
         });
     })
-    .catch(() => {
-      next(new NotFoundError('Неправильные почта или пароль'));
+    .catch((err) => {
+      next(err);
     });
 };
 
